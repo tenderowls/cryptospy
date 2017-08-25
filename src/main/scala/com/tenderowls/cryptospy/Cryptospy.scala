@@ -2,7 +2,7 @@ package com.tenderowls.cryptospy
 
 import java.io.File
 
-import com.tenderowls.cryptospy.providers.CoinOne
+import com.tenderowls.cryptospy.providers.{CoinOne, Poloniex}
 import com.tenderowls.cryptospy.utils.Scheduler
 import slogging.{LoggerConfig, PrintLogger, PrintLoggerFactory}
 
@@ -28,6 +28,7 @@ object Cryptospy extends App {
   }
 
   val coinone = new CoinOne(scheduler, directory)
+  val poloniex = new Poloniex(scheduler, directory)
 
   // Wait
   Thread.currentThread.join()

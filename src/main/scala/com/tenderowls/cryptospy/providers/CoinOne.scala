@@ -4,40 +4,40 @@ import java.io.File
 
 import com.tenderowls.cryptospy.data.{Asset, Currency, Order}
 import com.tenderowls.cryptospy.utils.{OrderStorage, Scheduler}
-import pushka.annotation._
 import pushka.json._
-import slogging.LazyLogging
+import pushka.annotation._
+import slogging.LoggerFactory
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scalaj.http._
 
-class CoinOne(scheduler: Scheduler, directory: File) extends LazyLogging {
+final class CoinOne(scheduler: Scheduler, directory: File) {
 
   import CoinOne._
 
-  val storage = new OrderStorage(directory, "coinone")
+  private val loggerName = "Coinone"
+  private val logger = LoggerFactory.getLogger(loggerName)
+  private val storage = new OrderStorage(directory, "coinone")
 
   // Main jobs
   private def startJobs(): Unit = {
-    logger.info("Started receiving orders from CoinOne")
-    logger.info(s"Currencies: ${Currencies.mkString(", ")}")
+    logger.info(s"Start to receive orders from CoinOne (${Currencies.mkString(", ")})")
     Currencies foreach { currency =>
       scheduler.schedule(RequestInterval) {
         val json = Http("https://api.coinone.co.kr/trades")
           .param("currency", currency.toString.toLowerCase)
           .param("format", "json")
           .asString
-        logger.info(s"Orders for $currency/${Currency.KRW} received")
-        val orders = read[Trades](json.body).completeOrders map { case completeOrder =>
+        val orders = read[Trades](json.body).completeOrders map { completeOrder =>
           val timestamp = completeOrder.timestamp.toLong
           val price = BigDecimal(completeOrder.price)
           val qty = BigDecimal(completeOrder.qty)
           Order(timestamp, Asset(currency, qty), Asset(Currency.KRW, price))
         }
         orders.foreach(order => storage.append(order))
-        logger.info(s"${orders.length} $currency/${Currency.KRW} orders added")
+        logger.info(s"Add ${orders.length} $currency/${Currency.KRW} orders")
       }
     }
   }
