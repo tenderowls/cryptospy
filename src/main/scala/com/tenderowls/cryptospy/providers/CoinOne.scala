@@ -30,39 +30,27 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
     logger.info(s"Start to receive orders from CoinOne (${Currencies.mkString(", ")})")
     Currencies foreach { currency =>
       scheduler.schedule(SessionInterval, 0 seconds) {
+        val lastTimestamp = storage.lastAppendTimestamp.getOrElse(0L) / 1000L
         val json = Http("https://api.coinone.co.kr/trades")
           .param("currency", currency.toString.toLowerCase)
           .param("format", "json")
           .asString
-        val orders = read[Trades](json.body).completeOrders map { completeOrder =>
-          val timestamp = completeOrder.timestamp.toLong
-          val price = BigDecimal(completeOrder.price)
-          val qty = BigDecimal(completeOrder.qty)
-          Order(timestamp, Asset(currency, qty), Asset(Currency.KRW, price))
-        }
+        val orders = read[Trades](json.body)
+          .completeOrders
+          .map { completeOrder =>
+            val timestamp = completeOrder.timestamp.toLong
+            val price = BigDecimal(completeOrder.price)
+            val qty = BigDecimal(completeOrder.qty)
+            Order(timestamp, Asset(currency, qty), Asset(Currency.KRW, price))
+          }
+          .filter(_.timestamp > lastTimestamp)
         orders.foreach(order => storage.append(order))
         if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.KRW} orders")
       }
     }
   }
 
-  private def scheduleFirstRun(): Unit = {
-    val now = System.currentTimeMillis()
-    val timePassedAfterLastUpdate = storage.lastAppendTimestamp
-      .fold(SessionInterval.toMillis)(t => now - t)
-      .milliseconds
-    if (timePassedAfterLastUpdate >= SessionInterval) {
-      startJobs()
-    } else {
-      val delay = SessionInterval - timePassedAfterLastUpdate
-      logger.info(s"Delayed on $delay")
-      scheduler.scheduleOnce(delay) {
-        startJobs()
-      }
-    }
-  }
-
-  scheduleFirstRun()
+  startJobs()
 }
 
 object CoinOne {
@@ -73,7 +61,7 @@ object CoinOne {
 
   @pushka case class Trades(completeOrders: Seq[CompleteOrder], timestamp: String)
 
-  final val SessionInterval = 1 hour
+  final val SessionInterval = 30 minutes
 
   final val Currencies = Set(
     Currency.BTC,
