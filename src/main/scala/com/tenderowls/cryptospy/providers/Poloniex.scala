@@ -1,6 +1,7 @@
 package com.tenderowls.cryptospy.providers
 
 import java.io.File
+import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 
@@ -15,6 +16,10 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scalaj.http._
 
+/**
+  * Poloniex.com
+  * @see https://poloniex.com/support/api/
+  */
 final class Poloniex(scheduler: Scheduler, directory: File) {
 
   import Poloniex._
@@ -27,30 +32,34 @@ final class Poloniex(scheduler: Scheduler, directory: File) {
 
   private def startJobs(): Unit = {
     logger.info(s"Start to receive orders from Poloniex (${Currencies.mkString(", ")})")
-    Currencies foreach { currency =>
-      scheduler.schedule(RequestInterval) {
+    Currencies.zipWithIndex foreach { case (currency, i) =>
+      scheduler.schedule(SessionInterval, RequestInterval * i) {
         val now = System.currentTimeMillis().milliseconds
         val start = storage.lastAppendTimestamp
           .map(_.milliseconds)
           .getOrElse(now - InitialOffset)
-        val json = Http("https://poloniex.com/public")
-          .param("command", "returnTradeHistory")
-          .param("currencyPair", pair(currency))
-          .param("start", start.toSeconds.toString)
-          .param("end", now.toSeconds.toString)
-          .asString
-        val orders = read[Seq[Entry]](json.body) map { entry =>
+        val json = try {
+          Http("https://poloniex.com/public")
+            .param("command", "returnTradeHistory")
+            .param("currencyPair", pair(currency))
+            .param("start", start.toSeconds.toString)
+            .param("end", now.toSeconds.toString)
+            .asString
+            .body
+        } catch {
+          case _: SocketTimeoutException =>
+            logger.warn(s"$currency fetching because timeout reached")
+            "[]"
+        }
+        val orders = read[Seq[Entry]](json) map { entry =>
           val date = DateFormat.parse(entry.date)
           val timestamp = date.getTime / 1000L
           val buyQty = BigDecimal(entry.total)
           val sellQty = BigDecimal(entry.amount)
-          entry.`type` match {
-            case "buy" => Order(timestamp, Asset(currency, buyQty), Asset(Currency.USDT, sellQty))
-            case "sell" => Order(timestamp, Asset(Currency.USDT, buyQty), Asset(currency, sellQty))
-          }
+          Order(timestamp, Asset(currency, buyQty), Asset(Currency.USDT, sellQty))
         }
         orders.foreach(order => storage.append(order))
-        logger.info(s"Add ${orders.length} $currency/${Currency.USDT} orders")
+        if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.USDT} orders")
       }
     }
   }
@@ -67,7 +76,6 @@ object Poloniex {
     dateFormat
   }
 
-  // USDT/BTC
   @pushka case class Entry(
     date: String,
     `type`: String,
@@ -94,5 +102,7 @@ object Poloniex {
   )
 
   final val InitialOffset = 180 days
-  final val RequestInterval = 5 minutes
+
+  final val SessionInterval = 5 minutes
+  final val RequestInterval = 10 seconds
 }

@@ -12,15 +12,17 @@ object Currency {
   case object XRP extends Currency("Ripple")
   case object XMR extends Currency("Monero")
   case object USDT extends Currency("Tether")
-
   case object LTC extends Currency("Litecoin")
   case object DASH extends Currency("Dash")
+  case object DOGE extends Currency("Doge")
   case object ZEC extends Currency("Zcash")
   case object NXT extends Currency("NXT")
   case object STR extends Currency("Stellar")
   case object REP extends Currency("Augur")
+  case object YBC extends Currency("Yuanbao")
 
   // Fiat
+  case object CNY extends Currency("Yuan")
   case object USD extends Currency("US Dollars")
   case object KRW extends Currency("South Korean Won")
 
@@ -34,12 +36,15 @@ object Currency {
     USDT.toString -> USDT,
     LTC.toString -> LTC,
     DASH.toString -> DASH,
+    DOGE.toString -> DOGE,
     ZEC.toString -> ZEC,
     NXT.toString -> NXT,
     STR.toString -> STR,
     REP.toString -> REP,
-
+    YBC.toString -> YBC,
+    
     USD.toString -> USD,
-    KRW.toString -> KRW
+    KRW.toString -> KRW,
+    CNY.toString -> CNY
   )
 }

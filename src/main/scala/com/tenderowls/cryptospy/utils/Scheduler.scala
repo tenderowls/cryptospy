@@ -29,12 +29,11 @@ class Scheduler {
     )
   }
 
-  def schedule[U](interval: FiniteDuration)(job: => U)(implicit ec: ExecutionContext): Cancel = {
+  def schedule[U](interval: FiniteDuration, delay: FiniteDuration)(job: => U)(implicit ec: ExecutionContext): Cancel = {
     val task = new TimerTask {
       def run(): Unit = ec.execute(() => job)
     }
-    val millis = interval.toMillis
-    timer.schedule(task, 0, millis)
+    timer.schedule(task, delay.toMillis, interval.toMillis)
     () => { task.cancel(); () }
   }
 }

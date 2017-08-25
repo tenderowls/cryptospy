@@ -2,7 +2,7 @@ package com.tenderowls.cryptospy
 
 import java.io.File
 
-import com.tenderowls.cryptospy.providers.{CoinOne, Poloniex}
+import com.tenderowls.cryptospy.providers.{BtcTrade, CoinOne, Poloniex}
 import com.tenderowls.cryptospy.utils.Scheduler
 import slogging.{LoggerConfig, PrintLogger, PrintLoggerFactory}
 
@@ -27,6 +27,7 @@ object Cryptospy extends App {
       sys.exit(1)
   }
 
+  val btcTrade = new BtcTrade(scheduler, directory)
   val coinone = new CoinOne(scheduler, directory)
   val poloniex = new Poloniex(scheduler, directory)
 

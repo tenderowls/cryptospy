@@ -13,6 +13,10 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scalaj.http._
 
+/**
+  * CoinOne
+  * @see http://doc.coinone.co.kr/#api-Public-RecentTransactions
+  */
 final class CoinOne(scheduler: Scheduler, directory: File) {
 
   import CoinOne._
@@ -25,7 +29,7 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
   private def startJobs(): Unit = {
     logger.info(s"Start to receive orders from CoinOne (${Currencies.mkString(", ")})")
     Currencies foreach { currency =>
-      scheduler.schedule(RequestInterval) {
+      scheduler.schedule(SessionInterval, 0 seconds) {
         val json = Http("https://api.coinone.co.kr/trades")
           .param("currency", currency.toString.toLowerCase)
           .param("format", "json")
@@ -37,7 +41,7 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
           Order(timestamp, Asset(currency, qty), Asset(Currency.KRW, price))
         }
         orders.foreach(order => storage.append(order))
-        logger.info(s"Add ${orders.length} $currency/${Currency.KRW} orders")
+        if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.KRW} orders")
       }
     }
   }
@@ -45,12 +49,12 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
   private def scheduleFirstRun(): Unit = {
     val now = System.currentTimeMillis()
     val timePassedAfterLastUpdate = storage.lastAppendTimestamp
-      .fold(RequestInterval.toMillis)(t => now - t)
+      .fold(SessionInterval.toMillis)(t => now - t)
       .milliseconds
-    if (timePassedAfterLastUpdate >= RequestInterval) {
+    if (timePassedAfterLastUpdate >= SessionInterval) {
       startJobs()
     } else {
-      val delay = RequestInterval - timePassedAfterLastUpdate
+      val delay = SessionInterval - timePassedAfterLastUpdate
       logger.info(s"Delayed on $delay")
       scheduler.scheduleOnce(delay) {
         startJobs()
@@ -69,7 +73,7 @@ object CoinOne {
 
   @pushka case class Trades(completeOrders: Seq[CompleteOrder], timestamp: String)
 
-  final val RequestInterval = 1 hour
+  final val SessionInterval = 1 hour
 
   final val Currencies = Set(
     Currency.BTC,
