@@ -35,9 +35,10 @@ final class Poloniex(scheduler: Scheduler, directory: File) {
     Currencies.zipWithIndex foreach { case (currency, i) =>
       scheduler.schedule(SessionInterval, RequestInterval * i) {
         val now = System.currentTimeMillis().milliseconds
-        val start = storage.lastAppendTimestamp
-          .map(_.milliseconds)
-          .getOrElse(now - InitialOffset)
+        val start = {
+          val ts = storage.lastTimestamp(currency)
+          if (ts == 0L) now - InitialOffset else ts.seconds
+        }
         val json = try {
           Http("https://poloniex.com/public")
             .param("command", "returnTradeHistory")
@@ -48,7 +49,7 @@ final class Poloniex(scheduler: Scheduler, directory: File) {
             .body
         } catch {
           case _: SocketTimeoutException =>
-            logger.warn(s"$currency fetching because timeout reached")
+            logger.warn(s"$currency failed fetching because timeout reached")
             "[]"
         }
         val orders = read[Seq[Entry]](json) map { entry =>
@@ -58,7 +59,9 @@ final class Poloniex(scheduler: Scheduler, directory: File) {
           val sellQty = BigDecimal(entry.amount)
           Order(timestamp, Asset(currency, buyQty), Asset(Currency.USDT, sellQty))
         }
-        orders.foreach(order => storage.append(order))
+        orders
+          .sortBy(_.timestamp)
+          .foreach(order => storage.append(order))
         if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.USDT} orders")
       }
     }

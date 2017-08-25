@@ -13,6 +13,7 @@ libraryDependencies ++= Seq(
   "biz.enef" %% "slogging" % "0.5.3"
 )
 
+dockerUsername        := Some("tenderowls")
 dockerBaseImage       := "openjdk:8-jre-alpine"
 dockerUpdateLatest    := true
 dockerExposedVolumes  := Seq("/data")

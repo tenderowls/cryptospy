@@ -31,7 +31,7 @@ class BtcTrade(scheduler: Scheduler, directory: File) {
     Currencies.zipWithIndex foreach {
       case (currency, i) =>
         scheduler.schedule(SessionInterval, RequestInterval * i) {
-          val lastTimestamp = storage.lastAppendTimestamp.getOrElse(0L) / 1000L
+          val lastTimestamp = storage.lastTimestamp(currency)
           val json = try {
             Http("http://api.btctrade.com/api/trades")
               .param("coin", currency.toString.toLowerCase)
@@ -39,7 +39,7 @@ class BtcTrade(scheduler: Scheduler, directory: File) {
               .body
           } catch {
             case _: SocketTimeoutException =>
-              logger.warn(s"$currency fetching because timeout reached")
+              logger.warn(s"$currency failed fetching because timeout reached")
               "[]"
           }
           val orders = read[Seq[Entry]](json)
@@ -48,6 +48,7 @@ class BtcTrade(scheduler: Scheduler, directory: File) {
               Order(timestamp, Asset(currency, entry.amount), Asset(Currency.CNY, entry.price))
             }
             .filter(_.timestamp > lastTimestamp)
+            .sortBy(_.timestamp)
           orders.foreach(order => storage.append(order))
           if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.CNY} orders")
         }

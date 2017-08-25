@@ -1,6 +1,7 @@
 package com.tenderowls.cryptospy.providers
 
 import java.io.File
+import java.net.SocketTimeoutException
 
 import com.tenderowls.cryptospy.data.{Asset, Currency, Order}
 import com.tenderowls.cryptospy.utils.{OrderStorage, Scheduler}
@@ -30,12 +31,20 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
     logger.info(s"Start to receive orders from CoinOne (${Currencies.mkString(", ")})")
     Currencies foreach { currency =>
       scheduler.schedule(SessionInterval, 0 seconds) {
-        val lastTimestamp = storage.lastAppendTimestamp.getOrElse(0L) / 1000L
-        val json = Http("https://api.coinone.co.kr/trades")
-          .param("currency", currency.toString.toLowerCase)
-          .param("format", "json")
-          .asString
-        val orders = read[Trades](json.body)
+        val lastTimestamp = storage.lastTimestamp(currency)
+        val json = try {
+          Http("https://api.coinone.co.kr/trades")
+            .param("currency", currency.toString.toLowerCase)
+            .param("format", "json")
+            .asString
+            .body
+        }
+        catch {
+          case _: SocketTimeoutException =>
+            logger.warn(s"$currency failed fetching because timeout reached")
+            "[]"
+        }
+        val orders = read[Trades](json)
           .completeOrders
           .map { completeOrder =>
             val timestamp = completeOrder.timestamp.toLong
@@ -44,6 +53,7 @@ final class CoinOne(scheduler: Scheduler, directory: File) {
             Order(timestamp, Asset(currency, qty), Asset(Currency.KRW, price))
           }
           .filter(_.timestamp > lastTimestamp)
+          .sortBy(_.timestamp)
         orders.foreach(order => storage.append(order))
         if (orders.nonEmpty) logger.info(s"Add ${orders.length} $currency/${Currency.KRW} orders")
       }
